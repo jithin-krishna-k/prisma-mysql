@@ -1,3 +1,5 @@
+// schema.prisma
+
 generator client {
   provider = "prisma-client-js"
 }
@@ -7,26 +9,879 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model profile {
-  id        Int     @id @default(autoincrement())
-  bio       String?
-  avatarUrl String?
-  userId    Int     @unique(map: "Profile_userId_key")
-  user      user    @relation(fields: [userId], references: [id], map: "Profile_userId_fkey")
-}
-
-model user {
-  id        Int      @id @default(autoincrement())
+// Main Tables
+model User {
+  id        String   @id @default(cuid())
   name      String
-  email     String   @unique(map: "User_email_key")
+  email     String   @unique
+  role      UserRole
+  status    UserStatus @default(active)
+  lastLogin DateTime?
   createdAt DateTime @default(now())
-  password  String?
-  profile   profile?
+
+  // Relations
+  assignedTickets SupportTicket[]
+  auditLogs      AuditLog[]
+
+  @@index([email])
+  @@index([role])
+  @@index([status])
 }
 
-model post {
-  id        Int      @id @default(autoincrement())
-  title     String
-  content   String?
+model Consultant {
+  id                String   @id @default(cuid())
+  email             String   @unique
+  firstName         String?
+  lastName          String?
+  name              String?  // For backward compatibility
+  phone             String?
+  avatar            String?
+  headline          String?
+  bio               String?
+  yearsOfExperience Int?
+  education         String?
+  
+  // Status fields
+  status          ConsultantStatus @default(pending)
+  approvalStatus  ConsultantApprovalStatus @default(pending)
+  profileStatus   ConsultantProfileStatus @default(draft)
+  kycStatus       KYCStatus @default(not_started)
+  
+  // Professional info
+  rating          Float? @default(0)
+  reviewCount     Int?   @default(0)
+  hourlyRate      Float?
+  totalEarnings   Float? @default(0)
+  payoutLocked    Boolean? @default(false)
+  
+  // Timeline
+  submittedAt       DateTime?
+  lastActionAt      DateTime?
+  timeInCurrentStatus Int?
+  joinedDate        DateTime?
+  timezone          String? @default("UTC")
+  
+  // Relations
+  languages      ConsultantLanguage[]
+  tags           ConsultantTag[]
+  specializations ConsultantSpecialization[]
+  pastCompanies  ConsultantCompany[]
+  caseStudies    ConsultantCaseStudy[]
+  kycDocuments   KYCDocument[]
+  services       Service[]
+  availability   ConsultantAvailability[]
+  sessionTypes   ConsultantSessionType[]
+  reviews        ConsultantReview[]
+  earnings       ConsultantEarning[]
+  payouts        ConsultantPayout[]
+  notifications  ConsultantNotification[]
+  auditLogs      ConsultantAuditLog[]
+  supportTickets SupportTicket[]
+  disputes       Dispute[]
+  settlements    Settlement[]
+  sessions       Session[]
+  
+  // Payout info (from mockApi data)
+  payoutMethod       PayoutMethod? @default(bank)
+  bankName          String?
+  accountNumber     String?
+  routingNumber     String?
+  accountHolderName String?
+  upiId             String?
+  payoutVerified    Boolean? @default(false)
+  
   createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([email])
+  @@index([status])
+  @@index([approvalStatus])
+  @@index([kycStatus])
+  @@index([createdAt])
+  Review Review[]
+}
+
+model Customer {
+  id          String   @id @default(cuid())
+  name        String
+  email       String   @unique
+  phone       String?
+  avatar      String?
+  status      CustomerStatus @default(active)
+  
+  // Location
+  city    String?
+  country String?
+  
+  // Stats
+  totalSpent        Float? @default(0)
+  totalSessions     Int?   @default(0)
+  completedSessions Int?   @default(0)
+  cancelledSessions Int?   @default(0)
+  averageRating     Float? @default(0)
+  
+  // Timeline
+  joinedDate   DateTime @default(now())
+  lastLoginAt  DateTime?
+  
+  // Relations
+  preferredCategories CustomerPreferredCategory[]
+  paymentMethods      PaymentMethod[]
+  sessions            Session[]
+  transactions        Transaction[]
+  supportTickets      SupportTicket[]
+  reviews             Review[]
+  notes               CustomerNote[]
+
+  @@index([email])
+  @@index([status])
+  @@index([joinedDate])
+}
+
+// Service Management
+model Service {
+  id           String   @id @default(cuid())
+  title        String
+  description  String?
+  price        Float
+  status       ServiceStatus @default(pending)
+  category     String
+  submittedAt  DateTime @default(now())
+  
+  // Relations
+  consultantId     String
+  consultant       Consultant @relation(fields: [consultantId], references: [id])
+  attachments      ServiceAttachment[]
+  changeHistory    ServiceChangeHistory[]
+  sessions         Session[]
+
+  @@index([consultantId])
+  @@index([status])
+  @@index([category])
+  @@index([submittedAt])
+}
+
+model ServiceCategory {
+  id             String @id @default(cuid())
+  name           String
+  description    String?
+  consultantCount Int?  @default(0)
+  serviceCount   Int?   @default(0)
+  isActive       Boolean? @default(true)
+
+  @@index([name])
+  @@index([isActive])
+}
+
+// Support System
+model SupportTicket {
+  id           String   @id @default(cuid())
+  title        String
+  description  String
+  status       TicketStatus @default(open)
+  priority     TicketPriority @default(medium)
+  category     String?
+  
+  // Parties involved
+  clientName     String?
+  consultantName String?
+  assignedTo     String?
+  
+  // SLA tracking
+  slaBreached   Boolean? @default(false)
+  responseTime  Int?
+  
+  // Timeline
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  resolvedAt DateTime?
+  
+  // Relations
+  customerId     String?
+  customer       Customer? @relation(fields: [customerId], references: [id])
+  consultantId   String?
+  consultant     Consultant? @relation(fields: [consultantId], references: [id])
+  assignedUserId String?
+  assignedUser   User? @relation(fields: [assignedUserId], references: [id])
+  messages       TicketMessage[]
+
+  @@index([status])
+  @@index([priority])
+  @@index([createdAt])
+}
+
+model Dispute {
+  id           String   @id @default(cuid())
+  title        String
+  description  String
+  status       DisputeStatus @default(open)
+  amount       Float
+  clientName   String
+  consultantName String
+  sessionId    String
+  createdAt    DateTime @default(now())
+  
+  // Relations
+  consultantId String?
+  consultant   Consultant? @relation(fields: [consultantId], references: [id])
+
+  @@index([status])
+  @@index([createdAt])
+}
+
+// Financial Tables
+model Transaction {
+  id          String   @id @default(cuid())
+  type        TransactionType
+  amount      Float
+  status      TransactionStatus @default(pending)
+  date        DateTime @default(now())
+  description String?
+  
+  // Parties
+  clientName     String?
+  consultantName String?
+  
+  // Relations
+  sessionId        String?
+  session          Session? @relation(fields: [sessionId], references: [id])
+  paymentMethodId  String?
+  paymentMethod    PaymentMethod? @relation(fields: [paymentMethodId], references: [id])
+  customerId       String?
+  customer         Customer? @relation(fields: [customerId], references: [id])
+
+  @@index([type])
+  @@index([status])
+  @@index([date])
+}
+
+model Settlement {
+  id          String   @id @default(cuid())
+  amount      Float
+  status      SettlementStatus @default(pending)
+  method      String
+  requestedAt DateTime @default(now())
+  processedAt DateTime?
+  
+  // Relations
+  consultantId   String
+  consultant     Consultant @relation(fields: [consultantId], references: [id])
+
+  @@index([status])
+  @@index([requestedAt])
+}
+
+model RefundRequest {
+  id          String   @id @default(cuid())
+  amount      Float
+  reason      String
+  status      RefundStatus @default(pending)
+  requestedAt DateTime @default(now())
+  
+  // Parties
+  clientName     String
+  consultantName String
+  
+  // Relations
+  sessionId    String
+  session      Session @relation(fields: [sessionId], references: [id])
+
+  @@index([status])
+  @@index([requestedAt])
+}
+
+// Session Management
+model Session {
+  id          String   @id @default(cuid())
+  serviceTitle String
+  scheduledAt DateTime
+  duration    Int      // in minutes
+  status      SessionStatus
+  amount      Float
+  rating      Int?
+  review      String?
+  
+  // Relations
+  consultantId String
+  consultant   Consultant @relation(fields: [consultantId], references: [id])
+  customerId   String
+  customer     Customer @relation(fields: [customerId], references: [id])
+  serviceId    String?
+  service      Service? @relation(fields: [serviceId], references: [id])
+  transactions Transaction[]
+  refundRequests RefundRequest[]
+
+  @@index([consultantId])
+  @@index([customerId])
+  @@index([status])
+  @@index([scheduledAt])
+}
+
+// Many-to-Many and Relation Tables
+model ConsultantLanguage {
+  id           String   @id @default(cuid())
+  consultantId String
+  language     String
+  proficiency  LanguageProficiency @default(fluent)
+  
+  consultant Consultant @relation(fields: [consultantId], references: [id], onDelete: Cascade)
+
+  @@index([consultantId])
+}
+
+model ConsultantTag {
+  id           String   @id @default(cuid())
+  consultantId String
+  tag          String
+  
+  consultant Consultant @relation(fields: [consultantId], references: [id], onDelete: Cascade)
+
+  @@index([consultantId])
+  @@index([tag])
+}
+
+model ConsultantSpecialization {
+  id           String   @id @default(cuid())
+  consultantId String
+  specialization String
+  
+  consultant Consultant @relation(fields: [consultantId], references: [id], onDelete: Cascade)
+
+  @@index([consultantId])
+}
+
+model ConsultantCompany {
+  id               String   @id @default(cuid())
+  consultantId     String
+  companyName      String
+  position         String?
+  startDate        DateTime?
+  endDate          DateTime?
+  currentlyWorking Boolean? @default(false)
+  description      String?
+  
+  consultant Consultant @relation(fields: [consultantId], references: [id], onDelete: Cascade)
+
+  @@index([consultantId])
+}
+
+model ConsultantCaseStudy {
+  id           String   @id @default(cuid())
+  consultantId String
+  title        String
+  description  String?
+  outcome      String?
+  isPublic     Boolean? @default(true)
+  
+  consultant Consultant @relation(fields: [consultantId], references: [id], onDelete: Cascade)
+
+  @@index([consultantId])
+}
+
+model KYCDocument {
+  id             String         @id @default(cuid())
+  consultantId   String
+  type           KYCDocumentType
+  fileName       String
+  fileUrl        String
+  uploadedAt     DateTime       @default(now())
+  status         KYCStatus      @default(pending)
+  verifiedBy     String?
+  verifiedAt     DateTime?
+  rejectionReason String?
+  
+  consultant Consultant @relation(fields: [consultantId], references: [id], onDelete: Cascade)
+
+  @@index([consultantId])
+  @@index([type])
+  @@index([status])
+}
+
+model ConsultantAvailability {
+  id           String   @id @default(cuid())
+  consultantId String
+  dayOfWeek    DayOfWeek
+  startTime    DateTime
+  endTime      DateTime
+  isAvailable  Boolean? @default(true)
+  
+  consultant Consultant @relation(fields: [consultantId], references: [id], onDelete: Cascade)
+
+  @@unique([consultantId, dayOfWeek, startTime, endTime])
+  @@index([consultantId])
+}
+
+model ConsultantSessionType {
+  id           String   @id @default(cuid())
+  consultantId String
+  name         String
+  description  String?
+  duration     Int
+  price        Float
+  isActive     Boolean? @default(true)
+  
+  consultant Consultant @relation(fields: [consultantId], references: [id], onDelete: Cascade)
+
+  @@index([consultantId])
+}
+
+model ConsultantReview {
+  id           String   @id @default(cuid())
+  consultantId String
+  clientName   String
+  rating       Int
+  title        String?
+  comment      String?
+  sessionId    String?
+  isVerified   Boolean? @default(false)
+  isPublic     Boolean? @default(true)
+  
+  consultant Consultant @relation(fields: [consultantId], references: [id], onDelete: Cascade)
+
+  @@index([consultantId])
+  @@index([rating])
+}
+
+model ConsultantEarning {
+  id           String        @id @default(cuid())
+  consultantId String
+  sessionId    String
+  amount       Float
+  commission   Float
+  netAmount    Float
+  status       EarningStatus @default(pending)
+  payoutDate   DateTime?
+  
+  consultant Consultant @relation(fields: [consultantId], references: [id], onDelete: Cascade)
+
+  @@index([consultantId])
+  @@index([status])
+}
+
+model ConsultantPayout {
+  id           String        @id @default(cuid())
+  consultantId String
+  amount       Float
+  status       PayoutStatus  @default(pending)
+  payoutMethod PayoutMethod
+  transactionId String?
+  failureReason String?
+  requestedAt  DateTime      @default(now())
+  processedAt  DateTime?
+  
+  consultant Consultant @relation(fields: [consultantId], references: [id], onDelete: Cascade)
+
+  @@index([consultantId])
+  @@index([status])
+}
+
+model ConsultantNotification {
+  id           String   @id @default(cuid())
+  consultantId String
+  type         NotificationType
+  title        String
+  message      String
+  isRead       Boolean? @default(false)
+  actionUrl    String?
+  metadata     Json?
+  
+  consultant Consultant @relation(fields: [consultantId], references: [id], onDelete: Cascade)
+
+  @@index([consultantId])
+  @@index([type])
+  @@index([isRead])
+}
+
+model CustomerPreferredCategory {
+  id          String   @id @default(cuid())
+  customerId  String
+  category    String
+  
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@index([customerId])
+}
+
+model PaymentMethod {
+  id          String   @id @default(cuid())
+  customerId  String
+  type        PaymentMethodType
+  last4       String?
+  brand       String?
+  isDefault   Boolean? @default(false)
+  expiryMonth Int?
+  expiryYear  Int?
+  addedAt     DateTime @default(now())
+  
+  customer    Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@index([customerId])
+  Transaction Transaction[]
+}
+
+model Review {
+  id           String   @id @default(cuid())
+  customerId   String
+  consultantId String
+  consultantName String
+  sessionId    String
+  rating       Int
+  comment      String?
+  createdAt    DateTime @default(now())
+  
+  customer   Customer @relation(fields: [customerId], references: [id])
+  consultant Consultant @relation(fields: [consultantId], references: [id])
+
+  @@index([consultantId])
+  @@index([rating])
+}
+
+model CustomerNote {
+  id         String   @id @default(cuid())
+  customerId String
+  content    String
+  createdBy  String
+  createdAt  DateTime @default(now())
+  isInternal Boolean? @default(true)
+  
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@index([customerId])
+}
+
+// System Tables
+model Role {
+  id          String @id @default(cuid())
+  name        String @unique
+  description String?
+  usersCount  Int?   @default(0)
+  isSystemRole Boolean? @default(false)
+  permissions Json?
+
+  @@index([name])
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  timestamp DateTime @default(now())
+  actor     String
+  action    String
+  entity    String
+  entityId  String
+  details   Json?
+  
+  userId String?
+  user   User? @relation(fields: [userId], references: [id])
+
+  @@index([timestamp])
+  @@index([actor])
+  @@index([action])
+}
+
+model Notification {
+  id         String   @id @default(cuid())
+  title      String
+  message    String
+  timestamp  DateTime @default(now())
+  isRead     Boolean? @default(false)
+  type       NotificationType
+  entityId   String?
+  entityType String?
+
+  @@index([timestamp])
+  @@index([isRead])
+  @@index([type])
+}
+
+model KPIData {
+  id           String   @id @default(cuid())
+  label        String
+  value        Float
+  change       Float?
+  changeType   ChangeType
+  sparkline    Json?
+  recordedAt   DateTime @default(now())
+
+  @@index([label])
+  @@index([recordedAt])
+}
+
+model Settings {
+  id                  Int      @id @default(autoincrement())
+  commissionPercentage Float
+  payoutCycle         PayoutCycle
+  slaResponseTime     Int
+  slaResolutionTime   Int
+  minPayoutAmount     Float
+  cancellationPolicy  String?
+  refundPolicy        String?
+  version             Int
+  updatedAt           DateTime @default(now())
+}
+
+// Attachment and History Tables
+model ServiceAttachment {
+  id        String   @id @default(cuid())
+  serviceId String
+  fileName  String
+  fileUrl   String
+  uploadedAt DateTime @default(now())
+  
+  service Service @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+
+  @@index([serviceId])
+}
+
+model ServiceChangeHistory {
+  id        String   @id @default(cuid())
+  serviceId String
+  action    String
+  timestamp DateTime @default(now())
+  actor     String
+  notes     String?
+  
+  service Service @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+
+  @@index([serviceId])
+  @@index([timestamp])
+}
+
+model TicketMessage {
+  id        String   @id @default(cuid())
+  ticketId  String
+  content   String
+  timestamp DateTime @default(now())
+  author    String
+  isInternal Boolean? @default(false)
+  
+  ticket SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+
+  @@index([ticketId])
+  @@index([timestamp])
+}
+
+model ConsultantAuditLog {
+  id           String   @id @default(cuid())
+  consultantId String
+  action       String
+  entityType   String
+  entityId     String?
+  oldValues    Json?
+  newValues    Json?
+  ipAddress    String?
+  userAgent    String?
+  createdAt    DateTime @default(now())
+  
+  consultant Consultant @relation(fields: [consultantId], references: [id], onDelete: Cascade)
+
+  @@index([consultantId])
+  @@index([action])
+}
+
+model ConsultantOTP {
+  id        String   @id @default(cuid())
+  phone     String
+  email     String?
+  otp       String
+  method    OTPMethod
+  isUsed    Boolean? @default(false)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  
+  @@index([phone])
+  @@index([email])
+  @@index([expiresAt])
+}
+
+// Enums
+enum UserRole {
+  super_admin
+  ops_admin
+  finance_admin
+  support_agent
+}
+
+enum UserStatus {
+  active
+  inactive
+  suspended
+}
+
+enum ConsultantStatus {
+  pending
+  approved
+  active
+  suspended
+  rejected
+}
+
+enum ConsultantApprovalStatus {
+  pending
+  approved
+  rejected
+  suspended
+}
+
+enum ConsultantProfileStatus {
+  draft
+  live
+  paused
+}
+
+enum KYCStatus {
+  not_started
+  uploaded
+  verified
+  rejected
+  pending
+}
+
+enum KYCDocumentType {
+  passport
+  pan_card
+  driving_license
+  aadhaar
+  voter_id
+  utility_bill
+  bank_statement
+}
+
+enum LanguageProficiency {
+  basic
+  intermediate
+  fluent
+  native
+}
+
+enum PayoutMethod {
+  bank
+  upi
+  paypal
+}
+
+enum ServiceStatus {
+  pending
+  approved
+  rejected
+  suspended
+}
+
+enum TicketStatus {
+  open
+  in_progress
+  resolved
+  closed
+}
+
+enum TicketPriority {
+  low
+  medium
+  high
+  urgent
+}
+
+enum DisputeStatus {
+  open
+  investigating
+  resolved
+  closed
+}
+
+enum TransactionType {
+  payment
+  payout
+  commission
+  refund
+}
+
+enum TransactionStatus {
+  pending
+  completed
+  failed
+  cancelled
+}
+
+enum SettlementStatus {
+  pending
+  approved
+  processed
+  failed
+}
+
+enum RefundStatus {
+  pending
+  approved
+  rejected
+  processed
+}
+
+enum SessionStatus {
+  scheduled
+  completed
+  cancelled
+  no_show
+}
+
+enum CustomerStatus {
+  active
+  inactive
+  suspended
+}
+
+enum PaymentMethodType {
+  card
+  paypal
+  bank_transfer
+}
+
+enum NotificationType {
+  info
+  warning
+  error
+  success
+  booking
+  payment
+  system
+}
+
+enum ChangeType {
+  positive
+  negative
+  neutral
+}
+
+enum PayoutCycle {
+  daily
+  weekly
+  biweekly
+  monthly
+}
+
+enum DayOfWeek {
+  monday
+  tuesday
+  wednesday
+  thursday
+  friday
+  saturday
+  sunday
+}
+
+enum EarningStatus {
+  pending
+  processing
+  paid
+  cancelled
+}
+
+enum PayoutStatus {
+  pending
+  processing
+  completed
+  failed
+}
+
+enum OTPMethod {
+  phone
+  email
 }
