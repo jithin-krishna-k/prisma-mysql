@@ -1,887 +1,882 @@
-// schema.prisma
-
 generator client {
   provider = "prisma-client-js"
 }
+
 
 datasource db {
   provider = "mysql"
   url      = env("DATABASE_URL")
 }
-
-// Main Tables
-model User {
-  id        String   @id @default(cuid())
-  name      String
-  email     String   @unique
-  role      UserRole
-  status    UserStatus @default(active)
-  lastLogin DateTime?
-  createdAt DateTime @default(now())
-
-  // Relations
-  assignedTickets SupportTicket[]
-  auditLogs      AuditLog[]
-
-  @@index([email])
-  @@index([role])
-  @@index([status])
+model adminsettings {
+  id                   Int                       @id @default(autoincrement())
+  commissionPercentage Decimal                   @db.Decimal(5, 2)
+  payoutCycle          adminsettings_payoutCycle
+  slaResponseTime      Int
+  slaResolutionTime    Int
+  minPayoutAmount      Decimal                   @db.Decimal(10, 2)
+  cancellationPolicy   String                    @db.Text
+  refundPolicy         String                    @db.Text
+  effectiveFrom        DateTime?                 @db.Date
+  version              Int
+  created_at           DateTime?                 @default(now()) @db.Timestamp(0)
+  updated_at           DateTime?                 @default(now()) @db.Timestamp(0)
 }
 
-model Consultant {
-  id                String   @id @default(cuid())
-  email             String   @unique
-  firstName         String?
-  lastName          String?
-  name              String?  // For backward compatibility
-  phone             String?
-  avatar            String?
-  headline          String?
-  bio               String?
-  yearsOfExperience Int?
-  education         String?
-  
-  // Status fields
-  status          ConsultantStatus @default(pending)
-  approvalStatus  ConsultantApprovalStatus @default(pending)
-  profileStatus   ConsultantProfileStatus @default(draft)
-  kycStatus       KYCStatus @default(not_started)
-  
-  // Professional info
-  rating          Float? @default(0)
-  reviewCount     Int?   @default(0)
-  hourlyRate      Float?
-  totalEarnings   Float? @default(0)
-  payoutLocked    Boolean? @default(false)
-  
-  // Timeline
-  submittedAt       DateTime?
-  lastActionAt      DateTime?
-  timeInCurrentStatus Int?
-  joinedDate        DateTime?
-  timezone          String? @default("UTC")
-  
-  // Relations
-  languages      ConsultantLanguage[]
-  tags           ConsultantTag[]
-  specializations ConsultantSpecialization[]
-  pastCompanies  ConsultantCompany[]
-  caseStudies    ConsultantCaseStudy[]
-  kycDocuments   KYCDocument[]
-  services       Service[]
-  availability   ConsultantAvailability[]
-  sessionTypes   ConsultantSessionType[]
-  reviews        ConsultantReview[]
-  earnings       ConsultantEarning[]
-  payouts        ConsultantPayout[]
-  notifications  ConsultantNotification[]
-  auditLogs      ConsultantAuditLog[]
-  supportTickets SupportTicket[]
-  disputes       Dispute[]
-  settlements    Settlement[]
-  sessions       Session[]
-  
-  // Payout info (from mockApi data)
-  payoutMethod       PayoutMethod? @default(bank)
-  bankName          String?
-  accountNumber     String?
-  routingNumber     String?
-  accountHolderName String?
-  upiId             String?
-  payoutVerified    Boolean? @default(false)
-  
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+model adminsettingshistory {
+  id            Int       @id @default(autoincrement())
+  adminId       Int?
+  adminName     String    @db.VarChar(255)
+  fieldChanged  String    @db.VarChar(255)
+  oldValue      String?   @db.Text
+  newValue      String?   @db.Text
+  effectiveFrom DateTime? @db.Date
+  changed_at    DateTime? @default(now()) @db.Timestamp(0)
+  user          user?     @relation(fields: [adminId], references: [id], map: "fk_settings_admin")
 
-  @@index([email])
-  @@index([status])
-  @@index([approvalStatus])
-  @@index([kycStatus])
-  @@index([createdAt])
-  Review Review[]
+  @@index([adminId], map: "fk_settings_admin")
 }
 
-model Customer {
-  id          String   @id @default(cuid())
-  name        String
-  email       String   @unique
-  phone       String?
-  avatar      String?
-  status      CustomerStatus @default(active)
-  
-  // Location
-  city    String?
-  country String?
-  
-  // Stats
-  totalSpent        Float? @default(0)
-  totalSessions     Int?   @default(0)
-  completedSessions Int?   @default(0)
-  cancelledSessions Int?   @default(0)
-  averageRating     Float? @default(0)
-  
-  // Timeline
-  joinedDate   DateTime @default(now())
-  lastLoginAt  DateTime?
-  
-  // Relations
-  preferredCategories CustomerPreferredCategory[]
-  paymentMethods      PaymentMethod[]
-  sessions            Session[]
-  transactions        Transaction[]
-  supportTickets      SupportTicket[]
-  reviews             Review[]
-  notes               CustomerNote[]
+model calendar_settings {
+  id                           Int        @id @default(autoincrement())
+  consultant_id                Int
+  timezone                     String?    @default("Asia/Kolkata") @db.VarChar(50)
+  default_buffer_before        Int?       @default(10)
+  default_buffer_after         Int?       @default(10)
+  min_booking_notice           Int?       @default(1)
+  default_slot_duration        Int?       @default(60)
+  working_hours_start          DateTime?  @default(dbgenerated("'09:00:00'")) @db.Time(0)
+  working_hours_end            DateTime?  @default(dbgenerated("'18:00:00'")) @db.Time(0)
+  working_days                 Json?
+  google_calendar_connected    Boolean?   @default(false)
+  google_calendar_sync_enabled Boolean?   @default(false)
+  zoom_integration_enabled     Boolean?   @default(false)
+  last_sync_time               DateTime?  @db.DateTime(0)
+  two_way_sync_enabled         Int?       @default(0) @db.TinyInt
+  updated_at                   DateTime?  @default(now()) @db.Timestamp(0)
+  consultant                   consultant @relation(fields: [consultant_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "calendar_settings_ibfk_1")
 
-  @@index([email])
-  @@index([status])
-  @@index([joinedDate])
+  @@index([consultant_id], map: "consultant_id")
 }
 
-// Service Management
-model Service {
-  id           String   @id @default(cuid())
-  title        String
-  description  String?
-  price        Float
-  status       ServiceStatus @default(pending)
-  category     String
-  submittedAt  DateTime @default(now())
-  
-  // Relations
-  consultantId     String
-  consultant       Consultant @relation(fields: [consultantId], references: [id])
-  attachments      ServiceAttachment[]
-  changeHistory    ServiceChangeHistory[]
-  sessions         Session[]
+model consultant {
+  id                    Int                        @id @default(autoincrement())
+  userId                Int?                       @unique(map: "userId_UNIQUE")
+  firstName             String?                    @db.Text
+  lastName              String?                    @db.Text
+  gender                String?                    @db.Text
+  dob                   String?                    @db.Text
+  mobile                Json?
+  email                 Json?
+  designation           Int?
+  achievements          String?                    @db.Text
+  profilePicture        String?                    @db.Text
+  locations             Json?
+  languages             Json?
+  skills                Json?
+  tags                  Json?
+  serviceCategory       Json?
+  experience            Int?
+  certifications        String?                    @db.Text
+  pan                   String?                    @db.Text
+  aadhaar               String?                    @db.Text
+  street                String?                    @db.Text
+  city                  String?                    @db.Text
+  state                 String?                    @db.Text
+  zipCode               String?                    @db.Text
+  country               String?                    @db.Text
+  timezone              String?                    @db.Text
+  socialMedia           Json?
+  gstIn                 String?                    @db.Text
+  bio                   String?                    @db.Text
+  kycDocuments          Json?
+  profile_status        consultant_profile_status? @default(draft)
+  is_onboarding         Int?
+  approveStatus         consultant_approveStatus?  @default(pending)
+  assignedManager       Int?
+  created_at            String?                    @db.Text
+  updated_at            String?                    @db.Text
+  education             Json?
+  pastCompanies         Json?
+  rejectReason          String?                    @db.Text
+  publicUrl             String?                    @db.VarChar(255)
+  shortUrl              String?                    @db.VarChar(255)
+  isRejected            Boolean?                   @default(false)
+  isBan                 Boolean?                   @default(false)
+  banReason             String?                    @db.Text
+  isSuspend             Int?                       @default(0) @db.TinyInt
+  suspendReason         String?                    @db.Text
+  calendar_settings     calendar_settings[]
+  user                  user?                      @relation(fields: [assignedManager], references: [id], map: "fk_assigned_manager")
+  consultant_short_urls consultant_short_urls?
+  disputes              disputes[]
+  feedback              feedback[]
+  meetings              meetings[]
+  payout_settings       payout_settings[]
+  services              services[]
+  session_reviews       session_reviews[]
+  ticket                ticket[]
+  time_slots            time_slots[]
 
-  @@index([consultantId])
-  @@index([status])
-  @@index([category])
-  @@index([submittedAt])
+  @@index([assignedManager], map: "fk_assigned_manager")
 }
 
-model ServiceCategory {
-  id             String @id @default(cuid())
-  name           String
-  description    String?
-  consultantCount Int?  @default(0)
-  serviceCount   Int?   @default(0)
-  isActive       Boolean? @default(true)
+model consultant_short_urls {
+  id            Int        @id @default(autoincrement())
+  consultant_id Int        @unique(map: "consultant_id_UNIQUE")
+  original_url  String     @db.VarChar(500)
+  short_code    String     @unique(map: "short_code") @db.VarChar(10)
+  short_url     String     @db.VarChar(500)
+  click_count   Int?       @default(0)
+  is_active     Boolean?   @default(true)
+  created_at    DateTime?  @default(now()) @db.Timestamp(0)
+  updated_at    DateTime?  @default(now()) @db.Timestamp(0)
+  consultant    consultant @relation(fields: [consultant_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "consultant_short_urls_ibfk_1")
 
-  @@index([name])
-  @@index([isActive])
+  @@index([consultant_id], map: "idx_consultant_id")
+  @@index([is_active], map: "idx_is_active")
+  @@index([short_code], map: "idx_short_code")
 }
 
-// Support System
-model SupportTicket {
-  id           String   @id @default(cuid())
-  title        String
-  description  String
-  status       TicketStatus @default(open)
-  priority     TicketPriority @default(medium)
-  category     String?
-  
-  // Parties involved
-  clientName     String?
-  consultantName String?
-  assignedTo     String?
-  
-  // SLA tracking
-  slaBreached   Boolean? @default(false)
-  responseTime  Int?
-  
-  // Timeline
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  resolvedAt DateTime?
-  
-  // Relations
-  customerId     String?
-  customer       Customer? @relation(fields: [customerId], references: [id])
-  consultantId   String?
-  consultant     Consultant? @relation(fields: [consultantId], references: [id])
-  assignedUserId String?
-  assignedUser   User? @relation(fields: [assignedUserId], references: [id])
-  messages       TicketMessage[]
+model customer {
+  id                Int               @id @default(autoincrement())
+  userid            Int
+  firstName         String            @db.VarChar(100)
+  email             String            @unique(map: "email") @db.VarChar(100)
+  mobile            String?           @db.VarChar(20)
+  profilePicture    String?           @db.Text
+  status            customer_status   @default(active)
+  joinedDate        DateTime          @db.DateTime(0)
+  lastLoginAt       DateTime?         @db.DateTime(0)
+  totalSpent        Decimal?          @default(0.00) @db.Decimal(10, 2)
+  totalSessions     Int?              @default(0)
+  completedSessions Int?              @default(0)
+  cancelledSessions Int?              @default(0)
+  averageRating     Decimal?          @default(0.00) @db.Decimal(3, 2)
+  street            String?           @db.VarChar(100)
+  city              String?           @db.VarChar(100)
+  state             String?           @db.VarChar(255)
+  country           String?           @db.VarChar(255)
+  zipcode           Int?
+  action_reason     String?           @db.Text
+  statusReason      String?           @db.VarChar(255)
+  serviceCategory   Json?
+  timezone          String?           @db.VarChar(45)
+  gender            String?           @db.VarChar(45)
+  user              user              @relation(fields: [userid], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "customer_ibfk_1")
+  customer_notes    customer_notes[]
+  disputes          disputes[]
+  session_reviews   session_reviews[]
+  ticket            ticket[]
 
-  @@index([status])
-  @@index([priority])
-  @@index([createdAt])
+  @@index([userid], map: "customer_ibfk_1")
 }
 
-model Dispute {
-  id           String   @id @default(cuid())
-  title        String
-  description  String
-  status       DisputeStatus @default(open)
-  amount       Float
-  clientName   String
-  consultantName String
-  sessionId    String
-  createdAt    DateTime @default(now())
-  
-  // Relations
-  consultantId String?
-  consultant   Consultant? @relation(fields: [consultantId], references: [id])
+model customer_notes {
+  id          Int      @id @default(autoincrement())
+  customer_id Int
+  content     String   @db.Text
+  created_by  String   @db.VarChar(100)
+  created_at  DateTime @default(now()) @db.DateTime(0)
+  is_internal Boolean? @default(true)
+  customer    customer @relation(fields: [customer_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "customer_notes_ibfk_1")
 
-  @@index([status])
-  @@index([createdAt])
+  @@index([customer_id], map: "customer_id")
 }
 
-// Financial Tables
-model Transaction {
-  id          String   @id @default(cuid())
-  type        TransactionType
-  amount      Float
-  status      TransactionStatus @default(pending)
-  date        DateTime @default(now())
-  description String?
-  
-  // Parties
-  clientName     String?
-  consultantName String?
-  
-  // Relations
-  sessionId        String?
-  session          Session? @relation(fields: [sessionId], references: [id])
-  paymentMethodId  String?
-  paymentMethod    PaymentMethod? @relation(fields: [paymentMethodId], references: [id])
-  customerId       String?
-  customer         Customer? @relation(fields: [customerId], references: [id])
-
-  @@index([type])
-  @@index([status])
-  @@index([date])
+model designations {
+  id         Int       @id @default(autoincrement())
+  name       String    @unique(map: "name") @db.VarChar(100)
+  created_at DateTime? @default(now()) @db.Timestamp(0)
+  updated_at DateTime? @default(now()) @db.Timestamp(0)
 }
 
-model Settlement {
-  id          String   @id @default(cuid())
-  amount      Float
-  status      SettlementStatus @default(pending)
-  method      String
-  requestedAt DateTime @default(now())
-  processedAt DateTime?
-  
-  // Relations
-  consultantId   String
-  consultant     Consultant @relation(fields: [consultantId], references: [id])
+model disputeattachment {
+  id        Int       @id @default(autoincrement())
+  disputeId Int
+  fileName  String    @db.VarChar(255)
+  fileUrl   String    @db.Text
+  fileSize  BigInt?
+  fileType  String?   @db.VarChar(100)
+  createdAt DateTime? @default(now()) @db.Timestamp(0)
+  disputes  disputes  @relation(fields: [disputeId], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "disputeattachment_ibfk_1")
 
-  @@index([status])
-  @@index([requestedAt])
+  @@index([disputeId], map: "disputeId")
 }
 
-model RefundRequest {
-  id          String   @id @default(cuid())
-  amount      Float
-  reason      String
-  status      RefundStatus @default(pending)
-  requestedAt DateTime @default(now())
-  
-  // Parties
-  clientName     String
-  consultantName String
-  
-  // Relations
-  sessionId    String
-  session      Session @relation(fields: [sessionId], references: [id])
+model disputes {
+  id                Int                 @id @default(autoincrement())
+  disputeNumber     String?             @unique(map: "disputeNumber") @db.VarChar(255)
+  title             String              @db.VarChar(255)
+  description       String?             @db.Text
+  status            disputes_status     @default(open)
+  amount            Decimal?            @db.Decimal(10, 2)
+  customerId        Int?
+  consultantId      Int?
+  sessionId         Int?
+  resolution        String?             @db.Text
+  refundAmount      Decimal?            @db.Decimal(10, 2)
+  createdAt         DateTime            @default(now()) @db.DateTime(0)
+  updatedAt         DateTime            @default(now()) @db.DateTime(0)
+  adminNotes        String?             @db.Text
+  raisedByUserId    Int?
+  disputeattachment disputeattachment[]
+  user              user?               @relation(fields: [raisedByUserId], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "disputes_ibfk_1")
+  consultant        consultant?         @relation(fields: [consultantId], references: [id], map: "fk_consultant_dispute")
+  customer          customer?           @relation(fields: [customerId], references: [id], onDelete: Cascade, map: "fk_customer_dispute")
+  sessions          sessions?           @relation(fields: [sessionId], references: [id], map: "fk_session_dispute")
 
-  @@index([status])
-  @@index([requestedAt])
+  @@index([consultantId], map: "fk_consultant_dispute")
+  @@index([customerId], map: "fk_customer_dispute")
+  @@index([sessionId], map: "fk_session_dispute")
+  @@index([raisedByUserId], map: "raisedByUserId")
 }
 
-// Session Management
-model Session {
-  id          String   @id @default(cuid())
-  serviceTitle String
-  scheduledAt DateTime
-  duration    Int      // in minutes
-  status      SessionStatus
-  amount      Float
-  rating      Int?
-  review      String?
-  
-  // Relations
-  consultantId String
-  consultant   Consultant @relation(fields: [consultantId], references: [id])
-  customerId   String
-  customer     Customer @relation(fields: [customerId], references: [id])
-  serviceId    String?
-  service      Service? @relation(fields: [serviceId], references: [id])
-  transactions Transaction[]
-  refundRequests RefundRequest[]
+model faq_articles {
+  id             Int            @id @default(autoincrement())
+  title          String         @db.VarChar(255)
+  content        String         @db.Text
+  category_id    Int
+  tags           Json?
+  views          Int?           @default(0)
+  helpful        Int?           @default(0)
+  not_helpful    Int?           @default(0)
+  last_updated   DateTime?      @default(now()) @db.DateTime(0)
+  ticketcategory ticketcategory @relation(fields: [category_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "faq_articles_ibfk_1")
 
-  @@index([consultantId])
-  @@index([customerId])
-  @@index([status])
-  @@index([scheduledAt])
+  @@index([category_id], map: "category_id")
 }
 
-// Many-to-Many and Relation Tables
-model ConsultantLanguage {
-  id           String   @id @default(cuid())
-  consultantId String
-  language     String
-  proficiency  LanguageProficiency @default(fluent)
-  
-  consultant Consultant @relation(fields: [consultantId], references: [id], onDelete: Cascade)
+model feedback {
+  id             Int            @id @default(autoincrement())
+  consultantId   Int
+  type           feedback_type? @default(widget)
+  rating         Int
+  comment        String?        @db.Text
+  sessionId      String?        @db.VarChar(255)
+  screenshot     String?        @db.VarChar(255)
+  reportIssue    Boolean?       @default(false)
+  linkedTicketId String?        @db.VarChar(255)
+  createdAt      DateTime?      @default(now()) @db.Timestamp(0)
+  consultant     consultant     @relation(fields: [consultantId], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "feedback_ibfk_1")
 
-  @@index([consultantId])
+  @@index([consultantId], map: "consultantId")
 }
 
-model ConsultantTag {
-  id           String   @id @default(cuid())
-  consultantId String
-  tag          String
-  
-  consultant Consultant @relation(fields: [consultantId], references: [id], onDelete: Cascade)
-
-  @@index([consultantId])
-  @@index([tag])
+model google_tokens {
+  id            Int       @id @default(autoincrement())
+  consultant_id Int       @unique(map: "unique_consultant")
+  access_token  String?   @db.Text
+  refresh_token String?   @db.Text
+  scope         String?   @db.Text
+  token_type    String?   @db.VarChar(50)
+  expiry_date   DateTime? @db.DateTime(0)
+  created_at    DateTime? @default(now()) @db.DateTime(0)
+  updated_at    DateTime? @default(now()) @db.DateTime(0)
 }
 
-model ConsultantSpecialization {
-  id           String   @id @default(cuid())
-  consultantId String
-  specialization String
-  
-  consultant Consultant @relation(fields: [consultantId], references: [id], onDelete: Cascade)
+model internal_notes {
+  id         Int       @id @default(autoincrement())
+  ticket_id  Int
+  content    String    @db.Text
+  created_by String    @db.VarChar(255)
+  created_at DateTime? @default(now()) @db.DateTime(0)
+  ticket     ticket    @relation(fields: [ticket_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "internal_notes_ibfk_1")
 
-  @@index([consultantId])
+  @@index([ticket_id], map: "ticket_id")
 }
 
-model ConsultantCompany {
-  id               String   @id @default(cuid())
-  consultantId     String
-  companyName      String
-  position         String?
-  startDate        DateTime?
-  endDate          DateTime?
-  currentlyWorking Boolean? @default(false)
-  description      String?
-  
-  consultant Consultant @relation(fields: [consultantId], references: [id], onDelete: Cascade)
-
-  @@index([consultantId])
+model languages {
+  id         Int       @id @default(autoincrement())
+  name       String    @unique(map: "name") @db.VarChar(100)
+  created_at DateTime? @default(now()) @db.Timestamp(0)
+  updated_at DateTime? @default(now()) @db.Timestamp(0)
 }
 
-model ConsultantCaseStudy {
-  id           String   @id @default(cuid())
-  consultantId String
-  title        String
-  description  String?
-  outcome      String?
-  isPublic     Boolean? @default(true)
-  
-  consultant Consultant @relation(fields: [consultantId], references: [id], onDelete: Cascade)
-
-  @@index([consultantId])
+model locations {
+  id         Int       @id @default(autoincrement())
+  name       String    @db.VarChar(100) @unique
+  created_at DateTime? @default(now()) @db.Timestamp(0)
+  updated_at DateTime? @default(now()) @db.Timestamp(0)
 }
 
-model KYCDocument {
-  id             String         @id @default(cuid())
-  consultantId   String
-  type           KYCDocumentType
-  fileName       String
-  fileUrl        String
-  uploadedAt     DateTime       @default(now())
-  status         KYCStatus      @default(pending)
-  verifiedBy     String?
-  verifiedAt     DateTime?
-  rejectionReason String?
-  
-  consultant Consultant @relation(fields: [consultantId], references: [id], onDelete: Cascade)
+model meetings {
+  id            Int              @id @default(autoincrement())
+  consultant_id Int
+  meeting_id    String           @unique(map: "meeting_id") @db.VarChar(255)
+  summary       String           @db.VarChar(255)
+  start_time    DateTime         @db.DateTime(0)
+  end_time      DateTime         @db.DateTime(0)
+  status        meetings_status? @default(scheduled)
+  created_at    DateTime?        @default(now()) @db.Timestamp(0)
+  updated_at    DateTime?        @default(now()) @db.Timestamp(0)
+  consultant    consultant       @relation(fields: [consultant_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "meetings_ibfk_1")
 
-  @@index([consultantId])
-  @@index([type])
-  @@index([status])
+  @@index([consultant_id], map: "consultant_id")
 }
 
-model ConsultantAvailability {
-  id           String   @id @default(cuid())
-  consultantId String
-  dayOfWeek    DayOfWeek
-  startTime    DateTime
-  endTime      DateTime
-  isAvailable  Boolean? @default(true)
-  
-  consultant Consultant @relation(fields: [consultantId], references: [id], onDelete: Cascade)
+model payout_settings {
+  id                  Int                    @id @default(autoincrement())
+  consultantId        Int
+  method              payout_settings_method
+  bankName            String?                @db.VarChar(255)
+  accountNumber       String?                @db.VarChar(100)
+  routingNumber       String?                @db.VarChar(100)
+  accountHolderName   String?                @db.VarChar(255)
+  upiId               String?                @db.VarChar(255)
+  isVerified          Boolean                @default(false)
+  autoPayoutEnabled   Boolean                @default(false)
+  minimumPayoutAmount Decimal                @default(0.00) @db.Decimal(10, 2)
+  currency            String?                @default("INR") @db.VarChar(10)
+  createdAt           DateTime?              @default(now()) @db.Timestamp(0)
+  updatedAt           DateTime?              @default(now()) @db.Timestamp(0)
+  payoutLocked        Int                    @default(0) @db.TinyInt
+  consultant          consultant             @relation(fields: [consultantId], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "payout_settings_ibfk_1")
 
-  @@unique([consultantId, dayOfWeek, startTime, endTime])
-  @@index([consultantId])
+  @@index([consultantId], map: "consultantId")
 }
 
-model ConsultantSessionType {
-  id           String   @id @default(cuid())
-  consultantId String
-  name         String
-  description  String?
-  duration     Int
-  price        Float
-  isActive     Boolean? @default(true)
-  
-  consultant Consultant @relation(fields: [consultantId], references: [id], onDelete: Cascade)
-
-  @@index([consultantId])
+model permissions {
+  id               Int                @id @default(autoincrement())
+  name             String             @unique(map: "name") @db.VarChar(100)
+  description      String?            @db.VarChar(255)
+  module           String?            @db.VarChar(50)
+  created_at       DateTime?          @default(now()) @db.Timestamp(0)
+  role_permissions role_permissions[]
 }
 
-model ConsultantReview {
-  id           String   @id @default(cuid())
-  consultantId String
-  clientName   String
-  rating       Int
-  title        String?
-  comment      String?
-  sessionId    String?
-  isVerified   Boolean? @default(false)
-  isPublic     Boolean? @default(true)
-  
-  consultant Consultant @relation(fields: [consultantId], references: [id], onDelete: Cascade)
-
-  @@index([consultantId])
-  @@index([rating])
+model recurrence_rules {
+  id           Int                        @id @default(autoincrement())
+  frequency    recurrence_rules_frequency
+  interval_val Int?                       @default(1)
+  days_of_week Json?
+  end_date     DateTime?                  @db.DateTime(0)
+  occurrences  Int?
 }
 
-model ConsultantEarning {
-  id           String        @id @default(cuid())
-  consultantId String
-  sessionId    String
-  amount       Float
-  commission   Float
-  netAmount    Float
-  status       EarningStatus @default(pending)
-  payoutDate   DateTime?
-  
-  consultant Consultant @relation(fields: [consultantId], references: [id], onDelete: Cascade)
+model role_permissions {
+  id            Int         @id @default(autoincrement())
+  role_id       Int
+  permission_id Int
+  allowed       Boolean     @default(true)
+  created_at    DateTime?   @default(now()) @db.Timestamp(0)
+  permissions   permissions @relation(fields: [permission_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_role_permissions_permission")
+  roles         roles       @relation(fields: [role_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_role_permissions_role")
 
-  @@index([consultantId])
-  @@index([status])
+  @@index([permission_id], map: "fk_role_permissions_permission")
+  @@index([role_id], map: "fk_role_permissions_role")
 }
 
-model ConsultantPayout {
-  id           String        @id @default(cuid())
-  consultantId String
-  amount       Float
-  status       PayoutStatus  @default(pending)
-  payoutMethod PayoutMethod
-  transactionId String?
-  failureReason String?
-  requestedAt  DateTime      @default(now())
-  processedAt  DateTime?
-  
-  consultant Consultant @relation(fields: [consultantId], references: [id], onDelete: Cascade)
-
-  @@index([consultantId])
-  @@index([status])
+model roles {
+  id               Int                @id @default(autoincrement())
+  name             String             @unique(map: "name") @db.VarChar(50)
+  description      String?            @db.VarChar(255)
+  created_at       DateTime?          @default(now()) @db.Timestamp(0)
+  is_system_role   Boolean            @default(false)
+  role_permissions role_permissions[]
+  user             user[]
 }
 
-model ConsultantNotification {
-  id           String   @id @default(cuid())
-  consultantId String
-  type         NotificationType
-  title        String
-  message      String
-  isRead       Boolean? @default(false)
-  actionUrl    String?
-  metadata     Json?
-  
-  consultant Consultant @relation(fields: [consultantId], references: [id], onDelete: Cascade)
-
-  @@index([consultantId])
-  @@index([type])
-  @@index([isRead])
+model service_category {
+  id          Int       @id @default(autoincrement())
+  name        String    @unique(map: "name") @db.VarChar(100)
+  created_at  DateTime? @default(now()) @db.Timestamp(0)
+  updated_at  DateTime? @default(now()) @db.Timestamp(0)
+  description String?   @db.VarChar(255)
+  isActive    Int       @default(0) @db.TinyInt
+  skills      skills[]
 }
 
-model CustomerPreferredCategory {
-  id          String   @id @default(cuid())
-  customerId  String
-  category    String
-  
-  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+model services {
+  id                          Int                             @id @default(autoincrement())
+  consultant_id               Int
+  title                       String                          @db.VarChar(255)
+  description                 String?                         @db.Text
+  duration                    Int?
+  price                       Int?
+  session_type                services_session_type?          @default(video)
+  buffer_time                 Int?                            @default(0)
+  cancellation_policy         services_cancellation_policy?   @default(strict)
+  status                      services_status?                @default(draft)
+  is_active                   Boolean?                        @default(true)
+  bookings_count              Int?                            @default(0)
+  rating                      Decimal?                        @default(0.0) @db.Decimal(2, 1)
+  review_count                Int?                            @default(0)
+  created_at                  DateTime?                       @default(now()) @db.DateTime(0)
+  updated_at                  DateTime?                       @default(now()) @db.DateTime(0)
+  is_package                  Boolean?                        @default(false)
+  package_session_count       Int?
+  original_price              Int?
+  package_discount_percentage Int?
+  final_price                 Decimal?                        @db.Decimal(10, 2)
+  admin_approval_status       services_admin_approval_status?
+  admin_reason                String?                         @db.Text
+  service_category_id         Int?
+  consultant                  consultant                      @relation(fields: [consultant_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_consultant")
 
-  @@index([customerId])
+  @@index([consultant_id], map: "fk_consultant")
 }
 
-model PaymentMethod {
-  id          String   @id @default(cuid())
-  customerId  String
-  type        PaymentMethodType
-  last4       String?
-  brand       String?
-  isDefault   Boolean? @default(false)
-  expiryMonth Int?
-  expiryYear  Int?
-  addedAt     DateTime @default(now())
-  
-  customer    Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
-
-  @@index([customerId])
-  Transaction Transaction[]
+model session_notes {
+  id                 Int       @id @default(autoincrement())
+  sessionId          Int       @unique(map: "unique_session_note")
+  content            String    @db.Text
+  version            Int?      @default(1)
+  isSharedWithClient Boolean?  @default(false)
+  createdAt          DateTime? @default(now()) @db.Timestamp(0)
+  updatedAt          DateTime? @default(now()) @db.Timestamp(0)
+  sessions           sessions  @relation(fields: [sessionId], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "session_notes_ibfk_1")
 }
 
-model Review {
-  id           String   @id @default(cuid())
-  customerId   String
-  consultantId String
-  consultantName String
-  sessionId    String
-  rating       Int
-  comment      String?
-  createdAt    DateTime @default(now())
-  
-  customer   Customer @relation(fields: [customerId], references: [id])
-  consultant Consultant @relation(fields: [consultantId], references: [id])
+model session_resources {
+  id                 Int                           @id @default(autoincrement())
+  sessionId          Int
+  fileName           String                        @db.VarChar(255)
+  fileUrl            String                        @db.Text
+  fileSize           BigInt
+  fileType           String                        @db.VarChar(100)
+  uploadedBy         String?                       @db.VarChar(50)
+  isSharedWithClient Boolean?                      @default(false)
+  scanStatus         session_resources_scanStatus? @default(pending)
+  createdAt          DateTime?                     @default(now()) @db.Timestamp(0)
+  updatedAt          DateTime?                     @default(now()) @db.Timestamp(0)
+  sessions           sessions                      @relation(fields: [sessionId], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "session_resources_ibfk_1")
 
-  @@index([consultantId])
-  @@index([rating])
+  @@index([sessionId], map: "sessionId")
 }
 
-model CustomerNote {
-  id         String   @id @default(cuid())
-  customerId String
-  content    String
-  createdBy  String
-  createdAt  DateTime @default(now())
-  isInternal Boolean? @default(true)
-  
-  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model session_reviews {
+  id              BigInt     @id @default(autoincrement()) @db.UnsignedBigInt
+  sessionId       Int
+  consultantId    Int
+  clientId        Int
+  rating          Int
+  comment         String?    @db.Text
+  isPublic        Boolean?   @default(true)
+  consultantReply String?    @db.Text
+  createdAt       DateTime?  @default(now()) @db.DateTime(0)
+  updatedAt       DateTime?  @default(now()) @db.DateTime(0)
+  customer        customer   @relation(fields: [clientId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_review_client")
+  consultant      consultant @relation(fields: [consultantId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_review_consultant")
+  sessions        sessions   @relation(fields: [sessionId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_review_session")
 
-  @@index([customerId])
+  @@index([clientId], map: "fk_review_client")
+  @@index([consultantId], map: "fk_review_consultant")
+  @@index([sessionId], map: "fk_review_session")
 }
 
-// System Tables
-model Role {
-  id          String @id @default(cuid())
-  name        String @unique
-  description String?
-  usersCount  Int?   @default(0)
-  isSystemRole Boolean? @default(false)
-  permissions Json?
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model sessions {
+  id                 Int                         @id @default(autoincrement())
+  consultantId       Int
+  clientId           Int
+  clientName         String                      @db.VarChar(255)
+  clientEmail        String                      @db.VarChar(255)
+  clientAvatar       String?                     @db.Text
+  clientCompany      String?                     @db.VarChar(255)
+  clientTimezone     String                      @db.VarChar(50)
+  serviceId          Int
+  serviceName        String                      @db.VarChar(255)
+  serviceType        sessions_serviceType
+  scheduledAt        DateTime                    @db.Timestamp(0)
+  duration           Int
+  price              Decimal                     @db.Decimal(10, 2)
+  status             sessions_status
+  paymentStatus      sessions_paymentStatus
+  meetingLink        String?                     @db.Text
+  meetingType        sessions_meetingType
+  cancellationPolicy sessions_cancellationPolicy
+  cancelledBy        sessions_cancelledBy?
+  cancellationReason String?                     @db.Text
+  refundAmount       Decimal?                    @db.Decimal(10, 2)
+  refundStatus       sessions_refundStatus?
+  noShowBy           sessions_noShowBy?
+  disputeId          Int?
+  disputeStatus      sessions_disputeStatus?
+  clientQuestions    String?                     @db.Text
+  startedAt          DateTime?                   @db.Timestamp(0)
+  completedAt        DateTime?                   @db.Timestamp(0)
+  rating             Int?
+  consultantReply    String?                     @db.Text
+  createdAt          DateTime?                   @default(now()) @db.Timestamp(0)
+  updatedAt          DateTime?                   @default(now()) @db.Timestamp(0)
+  disputes           disputes[]
+  session_notes      session_notes?
+  session_resources  session_resources[]
+  session_reviews    session_reviews[]
 
-  @@index([name])
+  @@index([clientId], map: "idx_clientId")
+  @@index([consultantId], map: "idx_consultantId")
+  @@index([paymentStatus], map: "idx_paymentStatus")
+  @@index([scheduledAt], map: "idx_scheduledAt")
+  @@index([status], map: "idx_status")
 }
 
-model AuditLog {
-  id        String   @id @default(cuid())
-  timestamp DateTime @default(now())
-  actor     String
-  action    String
-  entity    String
-  entityId  String
-  details   Json?
-  
-  userId String?
-  user   User? @relation(fields: [userId], references: [id])
+model skills {
+  id                Int               @id @default(autoincrement())
+  name              String            @unique(map: "name") @db.VarChar(100)
+  created_at        DateTime?         @default(now()) @db.Timestamp(0)
+  updated_at        DateTime?         @default(now()) @db.Timestamp(0)
+  serviceCategoryId Int?
+  service_category  service_category? @relation(fields: [serviceCategoryId], references: [id], map: "fk_skills_serviceCategory")
 
-  @@index([timestamp])
-  @@index([actor])
-  @@index([action])
+  @@index([serviceCategoryId], map: "fk_skills_serviceCategory")
 }
 
-model Notification {
-  id         String   @id @default(cuid())
-  title      String
-  message    String
-  timestamp  DateTime @default(now())
-  isRead     Boolean? @default(false)
-  type       NotificationType
-  entityId   String?
-  entityType String?
-
-  @@index([timestamp])
-  @@index([isRead])
-  @@index([type])
+model sla_threshold {
+  id              Int @id @default(autoincrement())
+  response_time   Int
+  resolution_time Int
 }
 
-model KPIData {
-  id           String   @id @default(cuid())
-  label        String
-  value        Float
-  change       Float?
-  changeType   ChangeType
-  sparkline    Json?
-  recordedAt   DateTime @default(now())
-
-  @@index([label])
-  @@index([recordedAt])
+model support_contacts {
+  id           Int                   @id @default(autoincrement())
+  type         support_contacts_type
+  value        String                @db.VarChar(255)
+  label        String                @db.VarChar(255)
+  availability String?               @db.VarChar(255)
 }
 
-model Settings {
-  id                  Int      @id @default(autoincrement())
-  commissionPercentage Float
-  payoutCycle         PayoutCycle
-  slaResponseTime     Int
-  slaResolutionTime   Int
-  minPayoutAmount     Float
-  cancellationPolicy  String?
-  refundPolicy        String?
-  version             Int
-  updatedAt           DateTime @default(now())
+model tags {
+  id         Int       @id @default(autoincrement())
+  name       String    @unique(map: "name") @db.VarChar(50)
+  created_at DateTime? @default(now()) @db.Timestamp(0)
+  updated_at DateTime? @default(now()) @db.Timestamp(0)
 }
 
-// Attachment and History Tables
-model ServiceAttachment {
-  id        String   @id @default(cuid())
-  serviceId String
-  fileName  String
-  fileUrl   String
-  uploadedAt DateTime @default(now())
-  
-  service Service @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+model ticket {
+  id                           Int                @id @default(autoincrement())
+  ticketId                     String?            @unique(map: "ticketId") @db.VarChar(20)
+  createdBy                    Int
+  customerId                   Int?
+  consultantId                 Int?
+  categoryId                   Int
+  subject                      String             @db.VarChar(255)
+  description                  String             @db.Text
+  priority                     ticket_priority    @default(medium)
+  status                       ticket_status      @default(open)
+  slaStatus                    ticket_slaStatus?  @default(on_track)
+  slaBreachedAt                DateTime?          @db.DateTime(0)
+  assignedTo                   Int?
+  isEscalated                  Boolean?           @default(false)
+  escalatedAt                  DateTime?          @db.DateTime(0)
+  closedAt                     DateTime?          @db.DateTime(0)
+  reopenedAt                   DateTime?          @db.DateTime(0)
+  lastResponseAt               DateTime?          @db.DateTime(0)
+  resolutionReason             String?            @db.Text
+  resolvedAt                   DateTime?          @db.DateTime(0)
+  createdAt                    DateTime?          @default(now()) @db.DateTime(0)
+  updatedAt                    DateTime?          @default(now()) @db.DateTime(0)
+  closedReason                 String?            @db.VarChar(255)
+  acknowledgedAt               DateTime?          @db.DateTime(0)
+  internal_notes               internal_notes[]
+  consultant                   consultant?        @relation(fields: [consultantId], references: [id], onUpdate: NoAction, map: "fk_ticket_consultant")
+  customer                     customer?          @relation(fields: [customerId], references: [id], onUpdate: NoAction, map: "fk_ticket_customer")
+  user_ticket_createdByTouser  user               @relation("ticket_createdByTouser", fields: [createdBy], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "ticket_ibfk_1")
+  user_ticket_assignedToTouser user?              @relation("ticket_assignedToTouser", fields: [assignedTo], references: [id], onUpdate: NoAction, map: "ticket_ibfk_2")
+  ticketcategory               ticketcategory     @relation(fields: [categoryId], references: [id], onUpdate: NoAction, map: "ticket_ibfk_3")
+  ticketattachment             ticketattachment[]
+  ticketmessage                ticketmessage[]
 
-  @@index([serviceId])
+  @@index([assignedTo], map: "assignedTo")
+  @@index([categoryId], map: "categoryId")
+  @@index([createdBy], map: "createdBy")
+  @@index([consultantId], map: "fk_ticket_consultant")
+  @@index([customerId], map: "fk_ticket_customer")
 }
 
-model ServiceChangeHistory {
-  id        String   @id @default(cuid())
-  serviceId String
-  action    String
-  timestamp DateTime @default(now())
-  actor     String
-  notes     String?
-  
-  service Service @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+model ticketattachment {
+  id         Int                          @id @default(autoincrement())
+  ticketId   Int
+  fileName   String                       @db.VarChar(255)
+  fileUrl    String                       @db.VarChar(500)
+  fileSize   Int
+  fileType   String                       @db.VarChar(100)
+  scanStatus ticketattachment_scanStatus? @default(pending)
+  uploadedAt DateTime?                    @default(now()) @db.DateTime(0)
+  ticket     ticket                       @relation(fields: [ticketId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "ticketattachment_ibfk_1")
 
-  @@index([serviceId])
-  @@index([timestamp])
+  @@index([ticketId], map: "ticketId")
 }
 
-model TicketMessage {
-  id        String   @id @default(cuid())
-  ticketId  String
-  content   String
-  timestamp DateTime @default(now())
-  author    String
-  isInternal Boolean? @default(false)
-  
-  ticket SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
-
-  @@index([ticketId])
-  @@index([timestamp])
+model ticketcategory {
+  id           Int            @id @default(autoincrement())
+  name         String         @unique(map: "name") @db.VarChar(255)
+  description  String?        @db.Text
+  createdAt    DateTime?      @default(now()) @db.Timestamp(0)
+  faq_articles faq_articles[]
+  ticket       ticket[]
 }
 
-model ConsultantAuditLog {
-  id           String   @id @default(cuid())
-  consultantId String
-  action       String
-  entityType   String
-  entityId     String?
-  oldValues    Json?
-  newValues    Json?
-  ipAddress    String?
-  userAgent    String?
-  createdAt    DateTime @default(now())
-  
-  consultant Consultant @relation(fields: [consultantId], references: [id], onDelete: Cascade)
+model ticketmessage {
+  id         Int                      @id @default(autoincrement())
+  ticketId   Int
+  authorId   Int
+  authorType ticketmessage_authorType
+  content    String                   @db.Text
+  isInternal Boolean?                 @default(false)
+  createdAt  DateTime?                @default(now()) @db.DateTime(0)
+  ticket     ticket                   @relation(fields: [ticketId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "ticketmessage_ibfk_1")
 
-  @@index([consultantId])
-  @@index([action])
+  @@index([ticketId], map: "ticketId")
 }
 
-model ConsultantOTP {
-  id        String   @id @default(cuid())
-  phone     String
-  email     String?
-  otp       String
-  method    OTPMethod
-  isUsed    Boolean? @default(false)
-  expiresAt DateTime
-  createdAt DateTime @default(now())
-  
-  @@index([phone])
-  @@index([email])
-  @@index([expiresAt])
+model time_slots {
+  id               Int                        @id @default(autoincrement())
+  consultantId     Int
+  startUtc         DateTime                   @db.Timestamp(0)
+  endUtc           DateTime                   @db.Timestamp(0)
+  durationMin      Int
+  bufferBeforeMin  Int?                       @default(0)
+  bufferAfterMin   Int?                       @default(0)
+  recurrenceRuleId Int?
+  maxAttendees     Int?                       @default(1)
+  visibility       time_slots_visibility      @default(public)
+  meetingLinkMode  time_slots_meetingLinkMode @default(auto)
+  timezone         String                     @default("UTC") @db.VarChar(50)
+  status           time_slots_status          @default(available)
+  createdAt        DateTime                   @default(now()) @db.Timestamp(0)
+  updatedAt        DateTime                   @default(now()) @db.Timestamp(0)
+  MeetingLink      String?                    @db.VarChar(45)
+  consultant       consultant                 @relation(fields: [consultantId], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "time_slots_ibfk_1")
+
+  @@index([consultantId], map: "consultant_id")
 }
 
-// Enums
-enum UserRole {
-  super_admin
-  ops_admin
-  finance_admin
-  support_agent
+model user {
+  id                             Int                    @id @default(autoincrement())
+  name                           String?                @db.VarChar(45)
+  password                       String?                @db.VarChar(255)
+  email                          String?                @db.VarChar(45)
+  createdAt                      DateTime               @default(now()) @db.Timestamp(0)
+  updatedAt                      DateTime               @default(now()) @db.Timestamp(0)
+  IsActive                       Int                    @default(0) @db.TinyInt
+  verificationType               user_verificationType? @default(EMAIL)
+  role_id                        Int?
+  adminsettingshistory           adminsettingshistory[]
+  consultant                     consultant[]
+  customer                       customer[]
+  disputes                       disputes[]
+  ticket_ticket_createdByTouser  ticket[]               @relation("ticket_createdByTouser")
+  ticket_ticket_assignedToTouser ticket[]               @relation("ticket_assignedToTouser")
+  roles                          roles?                 @relation(fields: [role_id], references: [id], map: "fk_user_role")
+
+  @@index([role_id], map: "fk_user_role")
 }
 
-enum UserStatus {
+enum recurrence_rules_frequency {
+  daily
+  weekly
+  monthly
+}
+
+enum support_contacts_type {
+  email
+  phone
+  chat
+}
+
+enum adminsettings_payoutCycle {
+  weekly
+  biweekly
+  monthly
+}
+
+enum feedback_type {
+  widget
+  post_session
+  general
+}
+
+enum payout_settings_method {
+  bank
+  upi
+}
+
+enum ticketmessage_authorType {
+  consultant
+  support
+  admin
+  system
+}
+
+enum disputes_status {
+  open
+  investigating
+  resolved
+  rejected
+}
+
+enum customer_status {
   active
   inactive
   suspended
+  banned
 }
 
-enum ConsultantStatus {
-  pending
-  approved
+enum meetings_status {
+  scheduled
   active
-  suspended
-  rejected
+  ended
 }
 
-enum ConsultantApprovalStatus {
+enum services_session_type {
+  video
+  audio
+  in_person
+}
+
+enum ticketattachment_scanStatus {
   pending
-  approved
-  rejected
-  suspended
+  clean
+  infected
+  failed
 }
 
-enum ConsultantProfileStatus {
-  draft
-  live
-  paused
+enum user_verificationType {
+  MOBILE
+  EMAIL
+  SOCIAL
 }
 
-enum KYCStatus {
-  not_started
-  uploaded
-  verified
-  rejected
+enum services_cancellation_policy {
+  flexible
+  standard
+  strict
+}
+
+enum session_resources_scanStatus {
   pending
+  scanning
+  safe
+  unsafe
 }
 
-enum KYCDocumentType {
-  passport
-  pan_card
-  driving_license
-  aadhaar
-  voter_id
-  utility_bill
-  bank_statement
-}
-
-enum LanguageProficiency {
-  basic
-  intermediate
-  fluent
-  native
-}
-
-enum PayoutMethod {
-  bank
-  upi
-  paypal
-}
-
-enum ServiceStatus {
-  pending
-  approved
-  rejected
-  suspended
-}
-
-enum TicketStatus {
-  open
-  in_progress
-  resolved
-  closed
-}
-
-enum TicketPriority {
+enum ticket_priority {
   low
   medium
   high
   urgent
 }
 
-enum DisputeStatus {
-  open
-  investigating
-  resolved
-  closed
-}
-
-enum TransactionType {
-  payment
-  payout
-  commission
-  refund
-}
-
-enum TransactionStatus {
-  pending
-  completed
-  failed
-  cancelled
-}
-
-enum SettlementStatus {
-  pending
-  approved
-  processed
-  failed
-}
-
-enum RefundStatus {
-  pending
-  approved
-  rejected
-  processed
-}
-
-enum SessionStatus {
-  scheduled
-  completed
-  cancelled
-  no_show
-}
-
-enum CustomerStatus {
+enum services_status {
   active
   inactive
-  suspended
+  draft
+  archived
+  pending
 }
 
-enum PaymentMethodType {
-  card
-  paypal
-  bank_transfer
+enum ticket_status {
+  open
+  in_progress
+  resolved
+  closed
+  escalated
 }
 
-enum NotificationType {
-  info
+enum time_slots_visibility {
+  public
+  private
+}
+
+enum sessions_serviceType {
+  video
+  audio
+  chat
+  async
+}
+
+enum ticket_slaStatus {
+  on_track
   warning
-  error
-  success
-  booking
-  payment
+  breached
+  completed
+}
+
+enum time_slots_meetingLinkMode {
+  auto
+  manual
+  none
+}
+
+enum time_slots_status {
+  available
+  booked
+  blocked
+  cancelled
+}
+
+enum sessions_status {
+  upcoming
+  live
+  completed
+  cancelled
+  expired
+  no_show   @map("no-show")
+}
+
+enum sessions_paymentStatus {
+  escrow
+  pending_settlement
+  paid
+  refunded
+  payout_locked
+}
+
+enum sessions_meetingType {
+  zoom
+  in_app @map("in-app")
+  manual
+}
+
+enum sessions_cancellationPolicy {
+  flexible
+  standard
+  strict
+}
+
+enum sessions_cancelledBy {
+  consultant
+  client
   system
 }
 
-enum ChangeType {
-  positive
-  negative
-  neutral
-}
-
-enum PayoutCycle {
-  daily
-  weekly
-  biweekly
-  monthly
-}
-
-enum DayOfWeek {
-  monday
-  tuesday
-  wednesday
-  thursday
-  friday
-  saturday
-  sunday
-}
-
-enum EarningStatus {
+enum services_admin_approval_status {
   pending
-  processing
-  paid
-  cancelled
+  approved
+  rejected
+  modifications_requested
 }
 
-enum PayoutStatus {
+enum sessions_refundStatus {
   pending
-  processing
-  completed
+  processed
   failed
 }
 
-enum OTPMethod {
-  phone
-  email
+enum sessions_noShowBy {
+  client
+  consultant
+}
+
+enum sessions_disputeStatus {
+  open
+  resolved
+  escalated
+}
+
+enum consultant_profile_status {
+  live
+  draft
+  ban
+  suspend
+}
+
+enum consultant_approveStatus {
+  approved
+  rejected
+  pending
+  banned
+  suspended
 }
